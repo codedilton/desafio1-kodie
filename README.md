@@ -128,6 +128,7 @@ O fluxo conecta os seguintes nós:
 ├── README.md              # este arquivo
 ├── api/
 │   ├── .env.example       # variáveis de ambiente (sem segredos reais)
+│   ├── Dockerfile         # container da API FastAPI
 │   ├── requirements.txt   # dependências Python
 │   └── src/
 │       ├── main.py        # aplicação FastAPI
@@ -135,6 +136,7 @@ O fluxo conecta os seguintes nós:
 │       └── prompt.py      # prompt estruturado de classificação
 ├── n8n/
 │   └── classificacao-mensagens.json  # exportação do fluxo de automação
+├── docker-compose.yml     # API + n8n em containers
 └── docs/                  # capturas de tela do fluxo n8n (a adicionar)
 ```
 
@@ -151,6 +153,51 @@ Copie `.env.example` para `.env` e preencha:
 
 **Não comite o arquivo `.env` com chaves reais.** Apenas o `.env.example` deve ficar no repositório.
 
-## 10. Licença
+## 10. Execução com Docker (opcional — diferencial)
+
+O projeto inclui `Dockerfile` para a API e `docker-compose.yml` para rodar a API e o n8n em containers.
+
+### Pré-requisitos
+
+- Docker e Docker Compose instalados
+
+### 1. Configure o ambiente
+
+```bash
+cd api
+cp .env.example .env
+# edite .env e preencha OPENAI_API_KEY
+cd ..
+```
+
+### 2. Suba os containers
+
+```bash
+docker compose up --build -d
+```
+
+Isso sobe:
+- **api** (`http://localhost:8000`) — FastAPI com a classificação de mensagens
+- **n8n** (`http://localhost:5678`) — fluxo de automação
+
+### 3. Teste a API
+
+```bash
+curl -X POST http://localhost:8000/classify \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Minha fatura chegou com o valor errado, gostaria de correção."}'
+```
+
+### 4. Importe o fluxo no n8n
+
+Acesse `http://localhost:5678`, importe `n8n/classificacao-mensagens.json` e configure a variável `API_BASE_URL` como `http://api:8000` (rede interna do Docker).
+
+Para parar:
+
+```bash
+docker compose down
+```
+
+## 11. Licença
 
 Este projeto foi desenvolvido como parte do desafio técnico da KODIE.
