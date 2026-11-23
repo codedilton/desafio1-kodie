@@ -1,0 +1,269 @@
+{
+  "meta": {
+    "instanceId": "00000000-0000-0000-0000-000000000000",
+    "templateId": "classificacao-mensagens-clientes",
+    "name": "Classificação de Mensagens de Clientes",
+    "description": "Recebe mensagens de clientes via webhook, classifica com IA através da API FastAPI e encaminha para o setor responsável.",
+    "version": "1.0"
+  },
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook/classificar-mensagem",
+        "responseMode": "onReceived",
+        "responseData": "passThrough"
+      },
+      "name": "Receber Mensagem",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [400, 300],
+      "id": "webhook-entrada",
+      "webhookId": "classificar-mensagem"
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "values": {
+          "string": [
+            {
+              "name": "mensagem",
+              "value": "={{ $json.mensagem }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Extrair Mensagem",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [620, 300],
+      "id": "extrair-mensagem"
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.API_BASE_URL || 'http://localhost:8000' }}/classify",
+        "method": "POST",
+        "jsonParameters": true,
+        "options": {
+          "bodyContentJson": {
+            "mensagem": "={{ $json.mensagem }}"
+          }
+        },
+        "responseFormat": "json",
+        "timeout": 30000
+      },
+      "name": "Classificar com IA (API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [840, 300],
+      "id": "chamada-api"
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "values": {
+          "string": [
+            {
+              "name": "categoria",
+              "value": "={{ $json.classification.category }}"
+            },
+            {
+              "name": "confianca",
+              "value": "={{ $json.classification.confidence }}"
+            },
+            {
+              "name": "justificativa",
+              "value": "={{ $json.classification.reasoning }}"
+            },
+            {
+              "name": "mensagem_original",
+              "value": "={{ $json.mensagem }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Formatar Resultado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [1060, 300],
+      "id": "formatar-resultado"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "name": "categoria",
+          "conditions": {
+            "string": [
+              {
+                "value1": "={{ $json.categoria }}",
+                "operation": "equals",
+                "value2": "dúvida"
+              }
+            ]
+          }
+        },
+        "outputs": [
+          {
+            "name": "Dúvida",
+            "type": "string",
+            "value": "dúvida"
+          },
+          {
+            "name": "Reclamação",
+            "type": "string",
+            "value": "reclamação"
+          },
+          {
+            "name": "Solicitação",
+            "type": "string",
+            "value": "solicitação"
+          },
+          {
+            "name": "Outro / Erro",
+            "type": "string",
+            "value": ""
+          }
+        ]
+      },
+      "name": "Rotear por Categoria",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1.1,
+      "position": [1280, 200],
+      "id": "roteador"
+    },
+    {
+      "parameters": {
+        "toAddress": "suporte@empresa.com",
+        "subject": "Nova mensagem classificada: DÚVIDA",
+        "text": "Mensagem original: {{ $json.mensagem_original }}\n\nCategoria: {{ $json.categoria }}\nConfiança: {{ $json.confianca }}\nJustificativa: {{ $json.justificativa }}"
+      },
+      "name": "Enviar para Suporte (Dúvida)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 3.1,
+      "position": [1500, 120],
+      "id": "email-duvida"
+    },
+    {
+      "parameters": {
+        "toAddress": "reclamacoes@empresa.com",
+        "subject": "Nova mensagem classificada: RECLAMAÇÃO",
+        "text": "Mensagem original: {{ $json.mensagem_original }}\n\nCategoria: {{ $json.categoria }}\nConfiança: {{ $json.confianca }}\nJustificativa: {{ $json.justificativa }}"
+      },
+      "name": "Enviar para Reclamações (Reclamação)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 3.1,
+      "position": [1500, 300],
+      "id": "email-reclamacao"
+    },
+    {
+      "parameters": {
+        "toAddress": "atendimento@empresa.com",
+        "subject": "Nova mensagem classificada: SOLICITAÇÃO",
+        "text": "Mensagem original: {{ $json.mensagem_original }}\n\nCategoria: {{ $json.categoria }}\nConfiança: {{ $json.confianca }}\nJustificativa: {{ $json.justificativa }}"
+      },
+      "name": "Enviar para Atendimento (Solicitação)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 3.1,
+      "position": [1500, 480],
+      "id": "email-solicitacao"
+    },
+    {
+      "parameters": {
+        "toAddress": "geral@empresa.com",
+        "subject": "Mensagem não classificada - revisão manual",
+        "text": "Mensagem original: {{ $json.mensagem_original }}\n\nNão foi possível classificar automaticamente. Revise manualmente.\nCategoria: {{ $json.categoria }}\nConfiança: {{ $json.confianca }}\nJustificativa: {{ $json.justificativa }}"
+      },
+      "name": "Encaminhar para Revisão Manual",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 3.1,
+      "position": [1500, 660],
+      "id": "email-revisao"
+    }
+  ],
+  "connections": {
+    "Receber Mensagem": {
+      "main": [
+        [
+          {
+            "node": "Extrair Mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Mensagem": {
+      "main": [
+        [
+          {
+            "node": "Classificar com IA (API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classificar com IA (API)": {
+      "main": [
+        [
+          {
+            "node": "Formatar Resultado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatar Resultado": {
+      "main": [
+        [
+          {
+            "node": "Rotear por Categoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rotear por Categoria": {
+      "main": [
+        [
+          {
+            "node": "Enviar para Suporte (Dúvida)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar para Reclamações (Reclamação)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Enviar para Atendimento (Solicitação)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Encaminhar para Revisão Manual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "00000000-0000-0000-0000-000000000001",
+  "triggerCount": 0,
+  "updatedAt": "2026-11-23T00:00:00.000Z",
+  "createdAt": "2026-11-23T00:00:00.000Z"
+}
